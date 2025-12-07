@@ -24,6 +24,11 @@ export function getAnthropicClient(): Anthropic {
   });
 }
 
+export interface UploadedSpecification {
+  name: string;
+  extractedText: string;
+}
+
 export interface RAMSGenerationContext {
   cdmInfo: CDMInfo;
   widgets: Widget[];
@@ -31,6 +36,7 @@ export interface RAMSGenerationContext {
   contextualAnswers: Record<string, unknown>;
   widgetTypes: { id: string; name: string; description: string }[];
   contractorType: ContractorTypeInfo;
+  specifications?: UploadedSpecification[];
 }
 
 export interface GeneratedRAMSSection {
@@ -51,26 +57,78 @@ export const RAMS_SYSTEM_PROMPT = `You are an expert UK electrical contractor he
 
 Your task is to generate professional, comprehensive Risk Assessment and Method Statement (RAMS) documents for electrical installation projects.
 
-CRITICAL REQUIREMENTS:
-1. Write method statements as DETAILED NARRATIVES, not brief bullet points
-2. Describe exactly HOW the work will be carried out, step by step
-3. Include specific safe isolation procedures per BS 7671 and GS38
-4. Reference actual regulations and guidance by name
-5. Describe tools, test equipment, and materials that will be used
-6. Explain competency requirements (ECS cards, 18th Edition, etc.)
-7. Be specific to the electrical activities being undertaken
-8. Use professional UK electrical industry terminology
-9. Each method statement section should be 300-500 words minimum
+CRITICAL WRITING STYLE REQUIREMENTS:
 
-Format all output as well-structured markdown suitable for professional documents.
-Always maintain a safety-first approach with electrical safety as the paramount concern.`;
+1. WRITE IN FLOWING CORPORATE PROSE - NOT BULLET POINTS
+   - Method statements must read like formal corporate documentation suitable for submission to main contractors, local authorities, and clients
+   - Use complete sentences and paragraphs that flow naturally from one to the next
+   - Connect ideas with transitional phrases ("Following this...", "Prior to commencing...", "Upon completion of...")
+   - Avoid choppy, disconnected bullet points - weave information into cohesive paragraphs
+   - The document should reflect the professionalism expected of a competent contractor
+
+2. CORPORATE NARRATIVE STRUCTURE
+   - Begin each section with a formal introductory paragraph establishing scope and context
+   - Build logical progression through the work sequence demonstrating competence and planning
+   - Use subheadings to organize major phases, with polished prose within each
+   - Conclude sections with formal summary statements about quality assurance and handover
+   - Write as if this document will be reviewed by a Principal Contractor's H&S Manager
+
+3. CORPORATE PROFESSIONAL TONE
+   - Write in third person formal voice ("The Contractor shall...", "Operatives will...", "Works will be undertaken...")
+   - Use authoritative, confident language that demonstrates competence
+   - Employ formal corporate phrasing (e.g., "in accordance with", "to ensure compliance with", "as specified within")
+   - Sound like documentation from an established, reputable electrical contractor
+   - Avoid casual language, contractions, or informal expressions
+   - Use industry-standard terminology consistently throughout
+
+4. TECHNICAL ACCURACY & COMPLIANCE FOCUS
+   - Reference specific regulations by name and section (e.g., "Regulation 13 of the Electricity at Work Regulations 1989")
+   - Cite relevant British Standards and HSE guidance documents by reference number
+   - Describe tools, test equipment, and materials with specific technical specifications
+   - Include specific values, ratings, and standards (e.g., "insulation resistance testing at 500V DC")
+   - Demonstrate thorough understanding of competency requirements (ECS cards, AM2, C&G 2391, 18th Edition, etc.)
+   - Show clear awareness of the hierarchy of controls and ALARP principles
+
+5. DOCUMENT QUALITY & CORPORATE PRESENTATION
+   - Each method statement section should be 400-600 words minimum
+   - Risk assessments should provide comprehensive context and demonstrate due diligence
+   - Emergency procedures should be thorough and demonstrate duty of care
+   - The complete RAMS should present as a unified, corporate-quality document
+   - Demonstrate that the contractor has fully considered the scope, risks, and methodology
+   - Write content that would satisfy a pre-qualification questionnaire or tender submission
+
+FORMAT:
+- Use markdown with appropriate headings (##, ###)
+- Use numbered lists ONLY for sequential procedural steps where order is critical
+- Use bullet points sparingly, only for genuine lists (e.g., PPE items, equipment inventories)
+- The majority of content should be flowing prose paragraphs
+- Maintain consistent formatting and terminology throughout
+
+Always maintain a safety-first approach with electrical safety as the paramount concern. The document should demonstrate that safety has been considered at every stage of planning.`;
 
 // Generate a specific section of the RAMS
 export function buildSectionPrompt(
   sectionId: string,
   context: RAMSGenerationContext
 ): string {
-  const { cdmInfo, widgets, riskAssessments, contextualAnswers, widgetTypes, contractorType } = context;
+  const { cdmInfo, widgets, riskAssessments, contextualAnswers, widgetTypes, contractorType, specifications } = context;
+
+  // Build specification context if documents were uploaded
+  let specificationContext = "";
+  if (specifications && specifications.length > 0) {
+    specificationContext = `
+PROJECT SPECIFICATIONS & DOCUMENTS:
+The following specification documents have been provided by the client/user. Use this information to understand the project scope, requirements, and any specific considerations mentioned:
+
+${specifications.map((spec, index) => `
+--- Document ${index + 1}: ${spec.name} ---
+${spec.extractedText.substring(0, 15000)}
+${spec.extractedText.length > 15000 ? "\n[Document truncated for length...]" : ""}
+`).join("\n")}
+
+IMPORTANT: Incorporate relevant details from these specifications into your RAMS content. Reference specific requirements, materials, or methods mentioned in the specifications where applicable.
+`;
+  }
 
   const widgetNames = widgets.map((w) => {
     const type = widgetTypes.find((t) => t.id === w.typeId);
@@ -119,7 +177,7 @@ Trades/Activities Included:
 ${widgetNames.map((n) => `- ${n}`).join("\n")}
 
 F10 Notification: ${cdmInfo.notification.isNotifiable ? `Yes - Reference: ${cdmInfo.notification.f10Reference || "Pending"}` : "Not required"}
-`;
+${specificationContext}`;
 
   switch (sectionId) {
     case "intro":
