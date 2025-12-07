@@ -43,15 +43,14 @@ export async function POST(request: NextRequest) {
 
     // Extract text based on file type
     if (file.type === "application/pdf") {
-      // Dynamic import to avoid issues if package not installed
       try {
-        const pdfParseModule = await import("pdf-parse");
-        const pdfParse = pdfParseModule.default || pdfParseModule;
+        // Use require for CommonJS module compatibility
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const pdfParse = require("pdf-parse");
         const pdfData = await pdfParse(buffer);
         extractedText = pdfData.text;
       } catch (e) {
         console.error("PDF parse error:", e);
-        // Fallback: return a message that PDF parsing isn't available
         return NextResponse.json({
           text: "[PDF file uploaded - text extraction failed]",
           warning: "PDF parsing failed. The file may be corrupted or password-protected.",
@@ -62,13 +61,15 @@ export async function POST(request: NextRequest) {
       file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ) {
       try {
-        const mammoth = await import("mammoth");
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const mammoth = require("mammoth");
         const result = await mammoth.extractRawText({ buffer });
         extractedText = result.value;
       } catch (e) {
+        console.error("Word parse error:", e);
         return NextResponse.json({
-          text: "[Word file uploaded - install mammoth package to enable text extraction]",
-          warning: "Word parsing not available. Install mammoth package.",
+          text: "[Word file uploaded - text extraction failed]",
+          warning: "Word parsing failed.",
         });
       }
     } else if (file.type === "text/plain") {
