@@ -45,14 +45,16 @@ export async function POST(request: NextRequest) {
     if (file.type === "application/pdf") {
       // Dynamic import to avoid issues if package not installed
       try {
-        const pdfParse = (await import("pdf-parse")).default;
+        const pdfParseModule = await import("pdf-parse");
+        const pdfParse = pdfParseModule.default || pdfParseModule;
         const pdfData = await pdfParse(buffer);
         extractedText = pdfData.text;
       } catch (e) {
+        console.error("PDF parse error:", e);
         // Fallback: return a message that PDF parsing isn't available
         return NextResponse.json({
-          text: "[PDF file uploaded - install pdf-parse package to enable text extraction]",
-          warning: "PDF parsing not available. Install pdf-parse package.",
+          text: "[PDF file uploaded - text extraction failed]",
+          warning: "PDF parsing failed. The file may be corrupted or password-protected.",
         });
       }
     } else if (
