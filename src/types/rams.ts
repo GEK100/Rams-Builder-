@@ -39,6 +39,10 @@ export interface RAMS {
     postcode: string;
   };
 
+  // Uploaded project scope (extracted text from PDF/Word)
+  projectScope?: string;
+  projectScopeFileName?: string;
+
   // Canvas state
   canvasData: CanvasState;
 

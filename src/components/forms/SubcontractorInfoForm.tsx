@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { ChevronDown, ChevronUp, Calendar, RefreshCw, PenLine, Upload, FileText, X, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ProjectScopeUpload } from "./ProjectScopeUpload";
 
 interface SectionProps {
   title: string;
@@ -127,6 +128,9 @@ export function SubcontractorInfoForm() {
           Complete the project details for your RAMS
         </p>
       </div>
+
+      {/* Project Scope Upload - First thing to do */}
+      <ProjectScopeUpload />
 
       {/* RAMS Dates - Always visible at top */}
       <Card variant="glass">
