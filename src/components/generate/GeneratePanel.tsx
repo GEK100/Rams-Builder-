@@ -113,6 +113,14 @@ export function GeneratePanel() {
       answersObj[a.questionId] = a.answer;
     });
 
+    // Build specifications array from uploaded project scope
+    const specifications = currentRAMS?.projectScope
+      ? [{
+          name: currentRAMS.projectScopeFileName || "Project Scope Document",
+          extractedText: currentRAMS.projectScope,
+        }]
+      : undefined;
+
     return {
       cdmInfo: currentRAMS?.cdmInfo || ({} as RAMSGenerationContext["cdmInfo"]),
       widgets,
@@ -124,6 +132,7 @@ export function GeneratePanel() {
         description: t.description,
       })),
       contractorType: currentRAMS?.contractorType || { type: "main_contractor", welfareProvidedByMC: false },
+      specifications,
     };
   };
 
@@ -843,6 +852,16 @@ ${selectedActivityDetails.map((a) => `- ${a?.name}`).join("\n")}
               )}
               <span className={cn(!hasRisks && "text-muted-foreground")}>
                 Risk Assessments ({riskAssessments.length} added)
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              {currentRAMS?.projectScope ? (
+                <CheckCircle2 className="h-5 w-5 text-primary" />
+              ) : (
+                <div className="h-5 w-5 rounded-full border-2 border-white/20" />
+              )}
+              <span className={cn(!currentRAMS?.projectScope && "text-muted-foreground")}>
+                Project Scope {currentRAMS?.projectScope ? "(uploaded)" : "(optional)"}
               </span>
             </div>
           </div>
