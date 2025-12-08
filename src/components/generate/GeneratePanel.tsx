@@ -33,6 +33,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DisclaimerModal } from "@/components/disclaimer/DisclaimerModal";
 
 type GenerationStatus = "idle" | "generating" | "complete" | "error";
 
@@ -60,6 +61,9 @@ export function GeneratePanel() {
   const [emailAddress, setEmailAddress] = useState("");
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const [isRecordingAcceptance, setIsRecordingAcceptance] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"download" | "email" | null>(null);
 
   // Get contractor type from current RAMS
   const contractorType: ContractorType = currentRAMS?.contractorType?.type || "main_contractor";
@@ -655,8 +659,71 @@ ${selectedActivityDetails.map((a) => `- ${a?.name}`).join("\n")}
     setIsGenerating(false);
   };
 
-  // Export/Download RAMS document
-  const handleDownload = () => {
+  // Show disclaimer before download
+  const handleDownloadClick = () => {
+    setPendingAction("download");
+    setShowDisclaimer(true);
+  };
+
+  // Show disclaimer before email
+  const handleEmailClick = () => {
+    setPendingAction("email");
+    setShowDisclaimer(true);
+  };
+
+  // Handle disclaimer acceptance
+  const handleDisclaimerAccept = async () => {
+    setIsRecordingAcceptance(true);
+
+    try {
+      // Generate content for hash
+      const content = generatedSections.map((s) => s.content).join("\n\n---\n\n");
+
+      // Record acceptance in backend
+      const response = await fetch("/api/rams/accept-disclaimer", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ramsId: currentRAMS?.id,
+          ramsVersion: currentRAMS?.version || 1,
+          generatedContent: content,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("Failed to record disclaimer acceptance");
+        // Continue with download even if recording fails
+      }
+
+      // Close disclaimer and proceed with pending action
+      setShowDisclaimer(false);
+
+      if (pendingAction === "download") {
+        performDownload();
+      } else if (pendingAction === "email") {
+        setShowEmailModal(true);
+      }
+
+      setPendingAction(null);
+    } catch (error) {
+      console.error("Error recording acceptance:", error);
+      // Continue with download even if recording fails
+      setShowDisclaimer(false);
+      if (pendingAction === "download") {
+        performDownload();
+      } else if (pendingAction === "email") {
+        setShowEmailModal(true);
+      }
+      setPendingAction(null);
+    } finally {
+      setIsRecordingAcceptance(false);
+    }
+  };
+
+  // Actually perform the download
+  const performDownload = () => {
     const projectTitle = currentRAMS?.cdmInfo?.project?.title || "RAMS_Document";
     const safeTitle = projectTitle.replace(/[^a-zA-Z0-9]/g, "_");
     const dateStr = new Date().toISOString().split("T")[0];
@@ -672,6 +739,11 @@ ${selectedActivityDetails.map((a) => `- ${a?.name}`).join("\n")}
     a.download = `${safeTitle}_${dateStr}.md`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Legacy function for email modal internal use
+  const handleDownload = () => {
+    performDownload();
   };
 
   // Send RAMS via email
@@ -813,11 +885,11 @@ ${selectedActivityDetails.map((a) => `- ${a?.name}`).join("\n")}
         </Button>
         {generatedSections.length > 0 && !isGenerating && (
           <div className="flex gap-2">
-            <Button size="lg" variant="outline" onClick={handleDownload}>
+            <Button size="lg" variant="outline" onClick={handleDownloadClick}>
               <Download className="h-5 w-5 mr-2" />
               Download
             </Button>
-            <Button size="lg" variant="outline" onClick={() => setShowEmailModal(true)}>
+            <Button size="lg" variant="outline" onClick={handleEmailClick}>
               <Mail className="h-5 w-5 mr-2" />
               Email
             </Button>
@@ -1000,6 +1072,18 @@ ${selectedActivityDetails.map((a) => `- ${a?.name}`).join("\n")}
           </div>
         </div>
       )}
+
+      {/* Disclaimer Modal */}
+      <DisclaimerModal
+        isOpen={showDisclaimer}
+        onClose={() => {
+          setShowDisclaimer(false);
+          setPendingAction(null);
+        }}
+        onAccept={handleDisclaimerAccept}
+        ramsTitle={currentRAMS?.cdmInfo?.project?.title || "RAMS Document"}
+        isLoading={isRecordingAcceptance}
+      />
     </div>
   );
 }
