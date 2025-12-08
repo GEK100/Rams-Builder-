@@ -40,6 +40,11 @@ export function ProjectScopeUpload() {
     }
   };
 
+  // Max file size: 5MB (scope documents don't need to be huge)
+  const MAX_FILE_SIZE = 5 * 1024 * 1024;
+  // Max extracted text: 50,000 characters (~12,000 tokens for AI)
+  const MAX_TEXT_LENGTH = 50000;
+
   const handleFile = async (file: File) => {
     // Validate file type
     const validTypes = [
@@ -54,9 +59,9 @@ export function ProjectScopeUpload() {
       return;
     }
 
-    // Validate file size (10MB max)
-    if (file.size > 10 * 1024 * 1024) {
-      setError("File size must be less than 10MB");
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      setError("File size must be less than 5MB. Try compressing the PDF or splitting the document.");
       return;
     }
 
@@ -189,7 +194,7 @@ export function ProjectScopeUpload() {
                   Select File
                 </Button>
                 <p className="text-xs text-muted-foreground mt-4">
-                  Supports PDF, Word (.doc, .docx), and text files up to 10MB
+                  Supports PDF, Word (.doc, .docx), and text files up to 5MB
                 </p>
               </>
             )}
