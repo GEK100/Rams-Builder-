@@ -3,15 +3,34 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Upload, FileText, X, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { Upload, FileText, X, Loader2, CheckCircle, AlertCircle, Sparkles, Check } from "lucide-react";
 import { useRAMSStore } from "@/stores/ramsStore";
 import { cn } from "@/lib/utils";
 
+interface ExtractedInfo {
+  projectTitle?: string;
+  projectDescription?: string;
+  projectReference?: string;
+  clientCompany?: string;
+  siteAddress?: {
+    line1?: string;
+    city?: string;
+    postcode?: string;
+  };
+  mainContractor?: string;
+  startDate?: string;
+  duration?: string;
+  suggestedActivities?: string[];
+}
+
 export function ProjectScopeUpload() {
-  const { currentRAMS, updateRAMS } = useRAMSStore();
+  const { currentRAMS, updateRAMS, updateCDMInfo } = useRAMSStore();
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [extractedInfo, setExtractedInfo] = useState<ExtractedInfo | null>(null);
+  const [showExtracted, setShowExtracted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -91,6 +110,29 @@ export function ProjectScopeUpload() {
         projectScope: data.text,
         projectScopeFileName: file.name,
       });
+
+      // Try to extract project info using AI
+      setIsExtracting(true);
+      try {
+        const extractResponse = await fetch("/api/extract-project-info", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scopeText: data.text }),
+        });
+
+        if (extractResponse.ok) {
+          const extractData = await extractResponse.json();
+          if (extractData.extracted && Object.keys(extractData.extracted).length > 0) {
+            setExtractedInfo(extractData.extracted);
+            setShowExtracted(true);
+          }
+        }
+      } catch (extractErr) {
+        console.error("Failed to extract project info:", extractErr);
+        // Non-fatal - user can still fill manually
+      } finally {
+        setIsExtracting(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to upload file");
     } finally {
@@ -98,15 +140,70 @@ export function ProjectScopeUpload() {
     }
   };
 
+  // Apply extracted information to the form
+  const handleApplyExtracted = () => {
+    if (!extractedInfo) return;
+
+    // Update CDM info with extracted data
+    if (extractedInfo.projectTitle || extractedInfo.projectDescription || extractedInfo.projectReference || extractedInfo.startDate) {
+      updateCDMInfo({
+        project: {
+          ...currentRAMS?.cdmInfo?.project,
+          title: extractedInfo.projectTitle || currentRAMS?.cdmInfo?.project?.title || "",
+          description: extractedInfo.projectDescription || currentRAMS?.cdmInfo?.project?.description || "",
+          reference: extractedInfo.projectReference || currentRAMS?.cdmInfo?.project?.reference || "",
+          startDate: extractedInfo.startDate || currentRAMS?.cdmInfo?.project?.startDate || "",
+          siteAddress: extractedInfo.siteAddress ? {
+            line1: extractedInfo.siteAddress.line1 || currentRAMS?.cdmInfo?.project?.siteAddress?.line1 || "",
+            city: extractedInfo.siteAddress.city || currentRAMS?.cdmInfo?.project?.siteAddress?.city || "",
+            postcode: extractedInfo.siteAddress.postcode || currentRAMS?.cdmInfo?.project?.siteAddress?.postcode || "",
+          } : currentRAMS?.cdmInfo?.project?.siteAddress || { line1: "", city: "", postcode: "" },
+        },
+      });
+    }
+
+    if (extractedInfo.clientCompany) {
+      updateCDMInfo({
+        client: {
+          ...currentRAMS?.cdmInfo?.client,
+          company: extractedInfo.clientCompany,
+        },
+      });
+    }
+
+    if (extractedInfo.mainContractor) {
+      updateCDMInfo({
+        principalContractor: {
+          ...currentRAMS?.cdmInfo?.principalContractor,
+          company: extractedInfo.mainContractor,
+        },
+      });
+    }
+
+    // Update RAMS title if we have a project title
+    if (extractedInfo.projectTitle) {
+      updateRAMS({ title: extractedInfo.projectTitle });
+    }
+
+    setShowExtracted(false);
+  };
+
   const handleRemove = () => {
     updateRAMS({
       projectScope: undefined,
       projectScopeFileName: undefined,
     });
+    setExtractedInfo(null);
+    setShowExtracted(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
+
+  // Count how many fields were extracted
+  const extractedFieldCount = extractedInfo
+    ? Object.entries(extractedInfo).filter(([, v]) => v !== undefined && v !== null && v !== "").length
+    : 0;
 
   const hasScope = !!currentRAMS?.projectScope;
 
@@ -149,6 +246,74 @@ export function ProjectScopeUpload() {
             <p className="text-xs text-muted-foreground">
               This content will be used when generating your RAMS document
             </p>
+
+            {/* Extracting indicator */}
+            {isExtracting && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                <p className="text-sm text-primary">Analyzing document for project details...</p>
+              </div>
+            )}
+
+            {/* Extracted info panel */}
+            {showExtracted && extractedInfo && extractedFieldCount > 0 && (
+              <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  <p className="font-medium text-primary">Project details found</p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  We found {extractedFieldCount} field{extractedFieldCount > 1 ? "s" : ""} in your document that can auto-fill the form:
+                </p>
+                <ul className="text-sm space-y-1">
+                  {extractedInfo.projectTitle && (
+                    <li className="flex items-center gap-2">
+                      <Check className="h-3 w-3 text-primary" />
+                      <span>Project Title: {extractedInfo.projectTitle}</span>
+                    </li>
+                  )}
+                  {extractedInfo.clientCompany && (
+                    <li className="flex items-center gap-2">
+                      <Check className="h-3 w-3 text-primary" />
+                      <span>Client: {extractedInfo.clientCompany}</span>
+                    </li>
+                  )}
+                  {extractedInfo.mainContractor && (
+                    <li className="flex items-center gap-2">
+                      <Check className="h-3 w-3 text-primary" />
+                      <span>Main Contractor: {extractedInfo.mainContractor}</span>
+                    </li>
+                  )}
+                  {extractedInfo.siteAddress?.line1 && (
+                    <li className="flex items-center gap-2">
+                      <Check className="h-3 w-3 text-primary" />
+                      <span>Site Address: {extractedInfo.siteAddress.line1}, {extractedInfo.siteAddress.city}</span>
+                    </li>
+                  )}
+                  {extractedInfo.projectReference && (
+                    <li className="flex items-center gap-2">
+                      <Check className="h-3 w-3 text-primary" />
+                      <span>Reference: {extractedInfo.projectReference}</span>
+                    </li>
+                  )}
+                  {extractedInfo.startDate && (
+                    <li className="flex items-center gap-2">
+                      <Check className="h-3 w-3 text-primary" />
+                      <span>Start Date: {extractedInfo.startDate}</span>
+                    </li>
+                  )}
+                </ul>
+                <div className="flex gap-2 pt-2">
+                  <Button size="sm" onClick={handleApplyExtracted}>
+                    <Check className="h-4 w-4 mr-1" />
+                    Apply to Form
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowExtracted(false)}>
+                    Dismiss
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div
