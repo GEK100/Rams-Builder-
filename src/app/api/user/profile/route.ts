@@ -42,9 +42,9 @@ export async function GET(request: NextRequest) {
 
     // Get data counts for transparency
     const [ramsCount, widgetCount, riskCount] = await Promise.all([
-      supabase.from("rams").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-      supabase.from("widgets").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-      supabase.from("risk_assessments").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("rams_documents").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("rams_widgets").select("id", { count: "exact", head: true }),
+      supabase.from("rams_risk_assessments").select("id", { count: "exact", head: true }),
     ]);
 
     return NextResponse.json({
