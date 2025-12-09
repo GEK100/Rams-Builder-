@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import Anthropic from "@anthropic-ai/sdk";
 import { RAMS_SYSTEM_PROMPT, buildSectionPrompt, type RAMSGenerationContext } from "@/lib/ai/claude";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/security/rate-limit";
+import { canGenerateRAMS, recordRAMSGeneration } from "@/lib/subscription/check-usage";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
@@ -39,6 +40,19 @@ export async function POST(request: NextRequest) {
             "X-RateLimit-Reset": String(rateLimitResult.resetTime),
           }
         }
+      );
+    }
+
+    // Subscription usage check
+    const usageCheck = await canGenerateRAMS(user.id, user.email);
+    if (!usageCheck.allowed) {
+      return NextResponse.json(
+        {
+          error: usageCheck.reason || "Generation limit reached",
+          upgradeRequired: true,
+          tier: usageCheck.tier,
+        },
+        { status: 403 }
       );
     }
 
@@ -93,9 +107,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Record usage (deduct credit or increment monthly usage)
+    // Only record for first generation of a RAMS (sectionId === "full" or first section)
+    if (sectionId === "full" || sectionId === "scope_of_works") {
+      const ramsId = context.projectInfo?.reference || crypto.randomUUID();
+      await recordRAMSGeneration(user.id, ramsId);
+    }
+
     return NextResponse.json({
       sectionId,
       content: textContent.text,
+      isAdmin: usageCheck.isAdmin,
+      remainingGenerations: usageCheck.remainingGenerations,
     });
   } catch (error) {
     const errorId = crypto.randomUUID();
