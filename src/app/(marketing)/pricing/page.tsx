@@ -4,19 +4,21 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
-import { SUBSCRIPTION_TIERS } from "@/lib/stripe/client";
-import { Check, Zap, FileText, Shield, Sparkles } from "lucide-react";
+import { getDisplayTiers } from "@/lib/stripe/client";
+import { Check, Zap, FileText, Shield, Star, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function PricingPage() {
   const [isAnnual, setIsAnnual] = useState(false);
 
-  const handleCheckout = async (tier: string) => {
+  const displayTiers = getDisplayTiers(isAnnual);
+
+  const handleCheckout = async (tierId: string) => {
     try {
       const response = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier, isAnnual }),
+        body: JSON.stringify({ tier: tierId }),
       });
 
       const data = await response.json();
@@ -29,6 +31,15 @@ export default function PricingPage() {
       console.error("Checkout error:", error);
       alert("Failed to start checkout");
     }
+  };
+
+  const getTierIcon = (tierId: string) => {
+    if (tierId === "free") return <FileText className="h-5 w-5 text-muted-foreground" />;
+    if (tierId === "pay_per_use") return <Zap className="h-5 w-5 text-amber-400" />;
+    if (tierId.startsWith("starter")) return <Shield className="h-5 w-5 text-blue-400" />;
+    if (tierId.startsWith("professional")) return <Star className="h-5 w-5 text-primary" />;
+    if (tierId.startsWith("team")) return <Users className="h-5 w-5 text-purple-400" />;
+    return <FileText className="h-5 w-5" />;
   };
 
   return (
@@ -55,7 +66,7 @@ export default function PricingPage() {
       <section className="py-20 text-center">
         <div className="container mx-auto px-4">
           <h1 className="text-4xl md:text-5xl font-bold mb-6">
-            Simple, Transparent Pricing
+            Simple pricing. No per-user nonsense.
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
             Choose the plan that works best for you. Start free and upgrade as you grow.
@@ -63,7 +74,7 @@ export default function PricingPage() {
 
           {/* Billing toggle */}
           <div className="flex items-center justify-center gap-4 mb-12">
-            <span className={cn("text-sm", !isAnnual && "text-primary")}>Monthly</span>
+            <span className={cn("text-sm font-medium", !isAnnual && "text-primary")}>Monthly</span>
             <button
               onClick={() => setIsAnnual(!isAnnual)}
               className={cn(
@@ -78,8 +89,8 @@ export default function PricingPage() {
                 )}
               />
             </button>
-            <span className={cn("text-sm", isAnnual && "text-primary")}>
-              Annual <span className="text-primary">(Save 20%)</span>
+            <span className={cn("text-sm font-medium", isAnnual && "text-primary")}>
+              Annual <span className="text-emerald-400">(Save 20%)</span>
             </span>
           </div>
         </div>
@@ -88,146 +99,116 @@ export default function PricingPage() {
       {/* Pricing cards */}
       <section className="pb-20">
         <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
-            {/* Free */}
-            <Card variant="glass" className="relative">
-              <CardHeader>
-                <CardTitle className="text-2xl">Free</CardTitle>
-                <CardDescription>Get started with basic features</CardDescription>
-                <div className="mt-4">
-                  <span className="text-4xl font-bold">£0</span>
-                  <span className="text-muted-foreground">/month</span>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Link href="/register">
-                  <Button variant="outline" className="w-full mb-6">
-                    Get Started
-                  </Button>
-                </Link>
-                <ul className="space-y-3">
-                  {SUBSCRIPTION_TIERS.free.features.map((feature, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm">
-                      <Check className="h-5 w-5 text-primary shrink-0" />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 max-w-7xl mx-auto">
+            {displayTiers.map((tier) => (
+              <Card
+                key={tier.id}
+                variant="glass"
+                className={cn(
+                  "relative",
+                  tier.popular && "border-primary ring-2 ring-primary"
+                )}
+              >
+                {tier.popular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap">
+                    MOST POPULAR
+                  </div>
+                )}
+                {tier.savings && (
+                  <div className="absolute -top-3 right-4 bg-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                    {tier.savings}
+                  </div>
+                )}
+                <CardHeader className={cn(tier.popular && "pt-8")}>
+                  <div className="flex items-center gap-2">
+                    {getTierIcon(tier.id)}
+                    <CardTitle className="text-xl">{tier.name}</CardTitle>
+                  </div>
+                  <CardDescription className="text-xs">{tier.description}</CardDescription>
+                  <div className="mt-4">
+                    {tier.billingPeriod === "free" ? (
+                      <span className="text-3xl font-bold">£0</span>
+                    ) : tier.billingPeriod === "one-time" ? (
+                      <>
+                        <span className="text-3xl font-bold">£{tier.price}</span>
+                        <span className="text-muted-foreground text-sm">/RAMS</span>
+                      </>
+                    ) : tier.billingPeriod === "annual" ? (
+                      <>
+                        <span className="text-3xl font-bold">
+                          £{Math.round(tier.price / 12)}
+                        </span>
+                        <span className="text-muted-foreground text-sm">/mo</span>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Billed annually (£{tier.price})
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-3xl font-bold">£{tier.price}</span>
+                        <span className="text-muted-foreground text-sm">/mo</span>
+                      </>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {/* Limits summary */}
+                  <div className="grid grid-cols-3 gap-2 mb-4 text-center">
+                    <div className="p-2 rounded-lg bg-white/5">
+                      <p className="text-lg font-bold">
+                        {tier.limits.ramsPerMonth === null ? "∞" : tier.limits.ramsPerMonth}
+                      </p>
+                      <p className="text-xs text-muted-foreground">RAMS/mo</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-white/5">
+                      <p className="text-lg font-bold">
+                        {tier.limits.templates === null ? "∞" : tier.limits.templates}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Templates</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-white/5">
+                      <p className="text-lg font-bold">{tier.limits.users}</p>
+                      <p className="text-xs text-muted-foreground">Users</p>
+                    </div>
+                  </div>
 
-            {/* Pay Per Use */}
-            <Card variant="glass" className="relative">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Zap className="h-5 w-5 text-amber-400" />
-                  <CardTitle className="text-2xl">Pay Per Use</CardTitle>
-                </div>
-                <CardDescription>Pay only for what you use</CardDescription>
-                <div className="mt-4">
-                  <span className="text-4xl font-bold">£4.99</span>
-                  <span className="text-muted-foreground">/document</span>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Button
-                  variant="outline"
-                  className="w-full mb-6"
-                  onClick={() => handleCheckout("pay_per_use")}
-                >
-                  Buy Credits
-                </Button>
-                <ul className="space-y-3">
-                  {SUBSCRIPTION_TIERS.pay_per_use.features.map((feature, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm">
-                      <Check className="h-5 w-5 text-primary shrink-0" />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-
-            {/* Monthly - Most Popular */}
-            <Card variant="glass" className="relative border-primary">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full">
-                MOST POPULAR
-              </div>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-primary" />
-                  <CardTitle className="text-2xl">Professional</CardTitle>
-                </div>
-                <CardDescription>For regular users</CardDescription>
-                <div className="mt-4">
-                  <span className="text-4xl font-bold">
-                    £{isAnnual ? "23.99" : "29.99"}
-                  </span>
-                  <span className="text-muted-foreground">/month</span>
-                  {isAnnual && (
-                    <p className="text-sm text-primary mt-1">Billed annually (£287.88)</p>
+                  {tier.id === "free" ? (
+                    <Link href="/register">
+                      <Button variant="outline" className="w-full mb-4">
+                        Get Started
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Button
+                      variant={tier.popular ? "default" : "outline"}
+                      className="w-full mb-4"
+                      onClick={() => handleCheckout(tier.id)}
+                    >
+                      {tier.billingPeriod === "one-time" ? "Buy Credits" : "Start Free Trial"}
+                    </Button>
                   )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Button
-                  className="w-full mb-6"
-                  onClick={() => handleCheckout(isAnnual ? "annual" : "monthly")}
-                >
-                  Start Free Trial
-                </Button>
-                <ul className="space-y-3">
-                  {SUBSCRIPTION_TIERS.monthly.features.map((feature, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm">
-                      <Check className="h-5 w-5 text-primary shrink-0" />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
 
-            {/* Enterprise */}
-            <Card variant="glass" className="relative">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-purple-400" />
-                  <CardTitle className="text-2xl">Enterprise</CardTitle>
-                </div>
-                <CardDescription>For large organizations</CardDescription>
-                <div className="mt-4">
-                  <span className="text-4xl font-bold">Custom</span>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Button variant="outline" className="w-full mb-6">
-                  Contact Sales
-                </Button>
-                <ul className="space-y-3">
-                  <li className="flex items-start gap-2 text-sm">
-                    <Check className="h-5 w-5 text-primary shrink-0" />
-                    <span>Everything in Professional</span>
-                  </li>
-                  <li className="flex items-start gap-2 text-sm">
-                    <Check className="h-5 w-5 text-primary shrink-0" />
-                    <span>Custom integrations</span>
-                  </li>
-                  <li className="flex items-start gap-2 text-sm">
-                    <Check className="h-5 w-5 text-primary shrink-0" />
-                    <span>Dedicated account manager</span>
-                  </li>
-                  <li className="flex items-start gap-2 text-sm">
-                    <Check className="h-5 w-5 text-primary shrink-0" />
-                    <span>SLA guarantee</span>
-                  </li>
-                  <li className="flex items-start gap-2 text-sm">
-                    <Check className="h-5 w-5 text-primary shrink-0" />
-                    <span>On-premise deployment option</span>
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
+                  <ul className="space-y-2">
+                    {tier.features.slice(0, 5).map((feature, i) => (
+                      <li key={i} className="flex items-start gap-2 text-xs">
+                        <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                    {tier.features.length > 5 && (
+                      <li className="text-xs text-muted-foreground pl-6">
+                        +{tier.features.length - 5} more features
+                      </li>
+                    )}
+                  </ul>
+                </CardContent>
+              </Card>
+            ))}
           </div>
+
+          <p className="text-center mt-8 text-muted-foreground">
+            All paid plans include unlimited edits and full access to the activity checklist.
+          </p>
         </div>
       </section>
 
@@ -241,7 +222,7 @@ export default function PricingPage() {
             <div>
               <h3 className="font-semibold mb-2">Can I cancel anytime?</h3>
               <p className="text-muted-foreground text-sm">
-                Yes, you can cancel your subscription at any time. You'll continue to have access
+                Yes, you can cancel your subscription at any time. You&apos;ll continue to have access
                 until the end of your billing period.
               </p>
             </div>
@@ -263,7 +244,7 @@ export default function PricingPage() {
               <h3 className="font-semibold mb-2">Can I switch plans?</h3>
               <p className="text-muted-foreground text-sm">
                 Yes, you can upgrade or downgrade your plan at any time. Changes take effect
-                immediately.
+                immediately and we&apos;ll prorate any charges.
               </p>
             </div>
           </div>
@@ -273,7 +254,7 @@ export default function PricingPage() {
       {/* Footer */}
       <footer className="border-t border-white/10 py-8">
         <div className="container mx-auto px-4 text-center text-muted-foreground text-sm">
-          <p>© 2024 RAMS Builder by Ictus Flow. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} RAMS Builder by Ictus Flow. All rights reserved.</p>
         </div>
       </footer>
     </div>
