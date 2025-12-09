@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     // Record usage (deduct credit or increment monthly usage)
     // Only record for first generation of a RAMS (sectionId === "full" or first section)
     if (sectionId === "full" || sectionId === "scope_of_works") {
-      const ramsId = context.projectInfo?.reference || crypto.randomUUID();
+      const ramsId = context.cdmInfo?.project?.reference || crypto.randomUUID();
       await recordRAMSGeneration(user.id, ramsId);
     }
 
